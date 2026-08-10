@@ -233,12 +233,21 @@ use crate::ascii::STRIDE;
 
 const HALF_STRIDE: usize = STRIDE / 2;
 
+#[allow(dead_code)]
+#[inline(always)]
+pub fn simd_unpack_narrow(s: u8x16) -> (u16x8, u16x8) {
+    let (first, second) = s.interleave(u8x16::splat(0));
+    (u16x8::from_ne_bytes(first), u16x8::from_ne_bytes(second))
+}
+
 #[inline(always)]
 pub(crate) fn simd_unpack(s: u8x16) -> u16x16 {
     // According to Compiler Explorer, this generates as good code as
     // interleaving to two 128-bit vectors on SSE2 and aarch64 NEON,
     // but this formulation is better for AVX2 than the formulation
-    // that would return `(u16x8, u16x8)`.
+    // that would return `(u16x8, u16x8)`. However, in the real
+    // context, this generates worse code aarch64, so the narrow variant
+    // above exists.
     let intermediate: u8x32 = simd_swizzle!(
         u8x16::splat(0),
         s,
@@ -377,8 +386,33 @@ fn split_u16_stride(stride: &[u16; STRIDE]) -> (&[u16; HALF_STRIDE], &[u16; HALF
 }
 
 #[inline(always)]
-fn unpack_simd_to(src_simd: u8x16, dst_stride: &mut [u16; STRIDE]) {
-    *dst_stride = simd_unpack(src_simd).to_array();
+fn split_u16_stride_mut(
+    stride: &mut [u16; STRIDE],
+) -> (&mut [u16; HALF_STRIDE], &mut [u16; HALF_STRIDE]) {
+    // Can't take two mutable references to output of `as_chunks_mut`.
+    let (head, tail) = stride.split_at_mut(HALF_STRIDE);
+    // `as_array` requires Rust 1.93.
+    (
+        &mut head.as_chunks_mut::<HALF_STRIDE>().0[0],
+        &mut tail.as_chunks_mut::<HALF_STRIDE>().0[0],
+    )
+}
+
+cfg_if! {
+    if #[cfg(any(all(feature = "std", target_feature = "sse2"), all(target_feature = "avx2", target_feature = "bmi1")))] {
+        #[inline(always)]
+        fn unpack_simd_to(src_simd: u8x16, dst_stride: &mut [u16; STRIDE]) {
+            *dst_stride = simd_unpack(src_simd).to_array();
+        }
+    } else {
+        #[inline(always)]
+        fn unpack_simd_to(src_simd: u8x16, dst_stride: &mut [u16; STRIDE]) {
+            let (first, second) = simd_unpack_narrow(src_simd);
+            let (dst_first, dst_second) = split_u16_stride_mut(dst_stride);
+            *dst_first = first.to_array();
+            *dst_second = second.to_array();
+        }
+    }
 }
 
 #[inline(always)]
