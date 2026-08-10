@@ -473,6 +473,7 @@ pub fn convert_utf8_to_utf16_up_to_invalid(src: &[u8], dst: &mut [u16]) -> (usiz
                         unsafe { *(dst.get_unchecked_mut(written)) = u16::from(byte) };
                         read += 1;
                         written += 1;
+                        // See `u8u16punct` branch for punctuation loop here.
                         continue 'outer;
                     }
                     continue 'inner;
