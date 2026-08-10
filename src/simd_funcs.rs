@@ -419,6 +419,9 @@ pub(crate) fn ascii_to_basic_latin_stride(
 
 // Negative results: Trying to widen to `u16x16` reads for AVX2
 // did not help. See the `wide` git branch.
+//
+// Negative results: Trying to validate after deinterleave on
+// aarch64 did not help. Seet the `zip` git branch.
 #[inline(always)]
 pub(crate) fn basic_latin_to_ascii_stride(
     src_stride: &[u16; STRIDE],
@@ -488,6 +491,9 @@ pub(crate) fn ascii_to_basic_latin_double_stride(
 
 // Negative results: Trying to widen to `u16x16` reads for AVX2
 // did not help. See the `wide` git branch.
+//
+// Negative results: Trying to validate after deinterleave on
+// aarch64 did not help. Seet the `zip` git branch.
 #[inline(always)]
 pub(crate) fn basic_latin_to_ascii_double_stride(
     src_double_stride: &[[u16; STRIDE]; 2],
