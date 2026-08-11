@@ -172,6 +172,13 @@ cfg_if! {
             ($name:ident, $stride:ident, $unit:ty, $simd:ty, $bound:expr) => {
                 #[inline(always)]
                 fn $name(buffer: &[$unit]) -> bool {
+                    // The most common reason to return `false` is for the first code
+                    // unit to fail the test, so check that first.
+                    if let Some(u) = buffer.first() {
+                        if *u >= $bound {
+                            return false;
+                        }
+                    }
                     let (strides, tail) = buffer.as_chunks::<{STRIDE / core::mem::size_of::<$unit>()}>();
                     let (quad_strides, strides_tail) = strides.as_chunks::<4>();
                     for quad_stride in quad_strides {
