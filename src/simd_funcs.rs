@@ -288,26 +288,6 @@ cfg_if! {
             }
         }
 
-        // According to Compiler Explorer, LLVM is smart enough to widen this to 256-bit vectors
-        // with a single movemask over that vector when compiled to AVX2. It looks like LLVM is
-        // better at widening two u16x8 vectors in the source to a single u16x16 vector for codegen
-        // for AVX2 than doing the reverse for aarch64.
-        #[inline(always)]
-        fn validate_basic_latin_simd(first_simd: u16x8, second_simd: u16x8) -> Option<(u16, usize)> {
-            let bound = u16x8::splat(0x7F);
-            let first_mask = movemask(mask_to_vendor(first_simd.simd_gt(bound)));
-            let second_mask = movemask(mask_to_vendor(second_simd.simd_gt(bound)));
-            let combined = (second_mask << 16) | first_mask;
-            if combined == 0 {
-                return None;
-            }
-            let pos = (combined.trailing_zeros() / 2) as usize;
-            if let Some(u) = first_simd.as_array().get(pos) {
-                return Some((*u, pos));
-            }
-            Some((second_simd[pos - 8], pos))
-        }
-
         #[inline(always)]
         fn validate_bmp_simd(first_simd: u16x8, second_simd: u16x8) -> Option<usize> {
             let surrogate_bits = u16x8::splat(0xD800);
@@ -329,7 +309,63 @@ cfg_if! {
             ret
         }
 
-        // TODO: Do better on 32-bit ARM.
+        #[inline(always)]
+        fn validate_bmp_simd(first_simd: u16x8, second_simd: u16x8) -> Option<usize> {
+            let first: u8x16 = first_simd.to_ne_bytes();
+            let second: u8x16 = second_simd.to_ne_bytes();
+            let (_, high) = first.deinterleave(second);
+            (high & u8x16::splat(0xF8)).simd_eq(u8x16::splat(0xD8)).first_set()
+        }
+    }
+}
+
+cfg_if! {
+    if #[cfg(target_feature = "sse2")] {
+
+        // According to Compiler Explorer, LLVM is smart enough to widen this to 256-bit vectors
+        // with a single movemask over that vector when compiled to AVX2. It looks like LLVM is
+        // better at widening two u16x8 vectors in the source to a single u16x16 vector for codegen
+        // for AVX2 than doing the reverse for aarch64.
+        #[inline(always)]
+        fn validate_basic_latin_simd(first_simd: u16x8, second_simd: u16x8) -> Option<(u16, usize)> {
+            let bound = u16x8::splat(0x7F);
+            let first_mask = movemask(mask_to_vendor(first_simd.simd_gt(bound)));
+            let second_mask = movemask(mask_to_vendor(second_simd.simd_gt(bound)));
+            let combined = (second_mask << 16) | first_mask;
+            if combined == 0 {
+                return None;
+            }
+            let pos = (combined.trailing_zeros() / 2) as usize;
+            if let Some(u) = first_simd.as_array().get(pos) {
+                return Some((*u, pos));
+            }
+            Some((second_simd[pos - 8], pos))
+        }
+
+    } else if #[cfg(target_arch = "arm")] {
+
+        fn validate_basic_latin_simd(first_simd: u16x8, second_simd: u16x8) -> Option<(u16, usize)> {
+            if simd_is_basic_latin(first_simd | second_simd) {
+                return None;
+            }
+            for (i, s) in first_simd.to_array().iter().enumerate() {
+                let b = *s;
+                if b >= 0x80 {
+                    return Some((b, i));
+                }
+            }
+            for (i, s) in second_simd.to_array().iter().enumerate() {
+                let b = *s;
+                if b >= 0x80 {
+                    return Some((b, HALF_STRIDE + i));
+                }
+            }
+            debug_assert!(false);
+            None
+        }
+
+    } else {
+
         #[inline(always)]
         fn validate_basic_latin_simd(first_simd: u16x8, second_simd: u16x8) -> Option<(u16, usize)> {
             let first: u8x16 = first_simd.to_ne_bytes();
@@ -344,15 +380,7 @@ cfg_if! {
                 None
             }
         }
-
-        #[inline(always)]
-        fn validate_bmp_simd(first_simd: u16x8, second_simd: u16x8) -> Option<usize> {
-            let first: u8x16 = first_simd.to_ne_bytes();
-            let second: u8x16 = second_simd.to_ne_bytes();
-            let (_, high) = first.deinterleave(second);
-            (high & u8x16::splat(0xF8)).simd_eq(u8x16::splat(0xD8)).first_set()
-        }
-    }
+   }
 }
 
 cfg_if! {
