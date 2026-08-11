@@ -329,6 +329,7 @@ cfg_if! {
             ret
         }
 
+        // TODO: Do better on 32-bit ARM.
         #[inline(always)]
         fn validate_basic_latin_simd(first_simd: u16x8, second_simd: u16x8) -> Option<(u16, usize)> {
             let first: u8x16 = first_simd.to_ne_bytes();
