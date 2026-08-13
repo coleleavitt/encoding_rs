@@ -307,6 +307,13 @@ With other little-endian target architectures, the code should compute correct
 results, but performance has not been tuned. With big-endian architectures,
 `core::simd` isn't actually used for now.
 
+On 32-bit ARM, be careful to either use a `thumbv7neon` target or to explicitly
+enable `neon` _and_ also build the standard library with `neon` enabled.
+Enabling `simd-accel` will build without error but will not result in the
+intended performance when `neon` isn't enabled for the compilation or when
+the stardard library has been built without `neon`. (The `thumbv7neon` targets
+exist to address this issue.)
+
 When `simd-accel` is enabled, this crate benefits from AVX2+BMI1. When targeting
 x86_64, if you know that the binaries will only be run on x86-64-v3 or higher,
 it's beneficial to compile with x86-64-v3 (or higher) statically enabled. If the
@@ -539,7 +546,7 @@ To regenerate the generated code:
 
 ## Release Notes
 
-# 0.8.40
+### 0.8.40
 
 * Increase MSRV to 1.88. (For `as_chunks` on slice.)
 * Fix correctness of buffer boundary handling in two-byte legacy decoders. (Applicable to streaming decode.)
@@ -551,7 +558,7 @@ To regenerate the generated code:
 * Documentation tweaks.
 * Address compiler warnings and Clippy lints.
 
-# 0.8.36 though 0.8.39
+### 0.8.36 though 0.8.39
 
 * Reserved version numbers.
 
